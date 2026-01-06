@@ -1,0 +1,9 @@
+# Simple Plant / Tree
+# Proste drzewko z rozgałęzieniami
+# Używa [ ] do push/pop stanu (rozgałęzienia)
+
+axiom: X
+angle: 25
+iterations: 5
+rule: X -> F+[[X]-X]-F[-FX]+X
+rule: F -> FF

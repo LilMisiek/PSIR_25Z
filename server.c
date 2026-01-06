@@ -15,6 +15,17 @@
 #define NODE_BITMAP_H 15     // Wysokość bitmapy węzła
 #define L_SYSTEM_MAX_LEN 100000
 
+// Struktura L-systemu
+#define MAX_RULES 26         // A-Z
+#define MAX_RULE_LEN 256
+
+typedef struct {
+    char axiom[256];
+    char rules[MAX_RULES][MAX_RULE_LEN];  // rules['F'-'A'] = "F+F-F"
+    int angle;
+    int iterations;
+} LSystemDef;
+
 // Struktura przechowująca stan węzła
 typedef struct {
     int id;
@@ -42,34 +53,134 @@ int total_handovers = 0;
 int messages_sent = 0;
 int messages_received = 0;
 
-// Prosty generator L-systemu (Krzywa Kocha: F -> F+F-F-F+F)
-void generate_lsystem(int iterations) {
-    char temp[L_SYSTEM_MAX_LEN];
-    strcpy(l_system_string, "F");
+// Definicja L-systemu (wczytana z pliku)
+LSystemDef lsystem;
+
+// Wczytaj L-system z pliku
+// Format pliku:
+//   axiom: F
+//   angle: 90
+//   iterations: 3
+//   rule: F -> F+F-F-F+F
+//   rule: X -> XX
+int load_lsystem(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        perror("Cannot open L-system file");
+        return -1;
+    }
     
-    for (int i = 0; i < iterations; i++) {
+    // Domyślne wartości
+    strcpy(lsystem.axiom, "F");
+    lsystem.angle = 90;
+    lsystem.iterations = 2;
+    memset(lsystem.rules, 0, sizeof(lsystem.rules));
+    
+    char line[512];
+    while (fgets(line, sizeof(line), f)) {
+        // Usuń newline
+        line[strcspn(line, "\r\n")] = 0;
+        
+        // Pomiń puste linie i komentarze
+        if (line[0] == '\0' || line[0] == '#') continue;
+        
+        if (strncmp(line, "axiom:", 6) == 0) {
+            // axiom: F+F+F+F
+            char *val = line + 6;
+            while (*val == ' ') val++;
+            strncpy(lsystem.axiom, val, sizeof(lsystem.axiom) - 1);
+            printf("[LSYS] Axiom: %s\n", lsystem.axiom);
+        }
+        else if (strncmp(line, "angle:", 6) == 0) {
+            // angle: 90
+            lsystem.angle = atoi(line + 6);
+            printf("[LSYS] Angle: %d\n", lsystem.angle);
+        }
+        else if (strncmp(line, "iterations:", 11) == 0) {
+            // iterations: 3
+            lsystem.iterations = atoi(line + 11);
+            printf("[LSYS] Iterations: %d\n", lsystem.iterations);
+        }
+        else if (strncmp(line, "rule:", 5) == 0) {
+            // rule: F -> F+F-F-F+F
+            char *ptr = line + 5;
+            while (*ptr == ' ') ptr++;
+            
+            char symbol = *ptr;
+            if (symbol < 'A' || symbol > 'Z') {
+                printf("[WARN] Invalid rule symbol: %c\n", symbol);
+                continue;
+            }
+            
+            // Znajdź "->"
+            char *arrow = strstr(ptr, "->");
+            if (!arrow) {
+                printf("[WARN] Invalid rule format (no ->): %s\n", line);
+                continue;
+            }
+            
+            char *replacement = arrow + 2;
+            while (*replacement == ' ') replacement++;
+            
+            int idx = symbol - 'A';
+            strncpy(lsystem.rules[idx], replacement, MAX_RULE_LEN - 1);
+            printf("[LSYS] Rule: %c -> %s\n", symbol, lsystem.rules[idx]);
+        }
+    }
+    
+    fclose(f);
+    return 0;
+}
+
+// Generuj string L-systemu na podstawie wczytanej definicji
+void generate_lsystem() {
+    char temp[L_SYSTEM_MAX_LEN];
+    strncpy(l_system_string, lsystem.axiom, L_SYSTEM_MAX_LEN - 1);
+    
+    printf("[SERVER] Generating L-system: axiom='%s', iterations=%d, angle=%d\n",
+           lsystem.axiom, lsystem.iterations, lsystem.angle);
+    
+    for (int iter = 0; iter < lsystem.iterations; iter++) {
         memset(temp, 0, L_SYSTEM_MAX_LEN);
         char *src = l_system_string;
         char *dst = temp;
+        size_t remaining = L_SYSTEM_MAX_LEN - 1;
         
-        while (*src) {
-            if (*src == 'F') {
-                const char *rule = "F-F+F+F-F"; 
-                size_t rule_len = strlen(rule);
-                if ((size_t)(dst - temp) + rule_len < L_SYSTEM_MAX_LEN - 1) {
-                    memcpy(dst, rule, rule_len);
+        while (*src && remaining > 0) {
+            int idx = *src - 'A';
+            
+            // Sprawdź czy jest reguła dla tego symbolu
+            if (idx >= 0 && idx < MAX_RULES && lsystem.rules[idx][0] != '\0') {
+                size_t rule_len = strlen(lsystem.rules[idx]);
+                if (rule_len <= remaining) {
+                    memcpy(dst, lsystem.rules[idx], rule_len);
                     dst += rule_len;
+                    remaining -= rule_len;
+                } else {
+                    break;  // Brak miejsca
                 }
             } else {
+                // Brak reguły - kopiuj symbol bez zmian
                 *dst++ = *src;
+                remaining--;
             }
             src++;
         }
         *dst = '\0';
         strcpy(l_system_string, temp);
+        
+        printf("[SERVER] After iteration %d: length=%zu\n", iter + 1, strlen(l_system_string));
     }
+    
     l_system_len = strlen(l_system_string);
-    printf("[SERVER] L-System generated. Length: %u symbols.\n", l_system_len);
+    printf("[SERVER] L-System generated. Final length: %u symbols.\n", l_system_len);
+    
+    // Pokaż początek stringa (debug)
+    if (l_system_len > 50) {
+        printf("[SERVER] String preview: %.50s...\n", l_system_string);
+    } else {
+        printf("[SERVER] String: %s\n", l_system_string);
+    }
 }
 
 // Funkcja pomocnicza do wysyłania pakietów
@@ -159,16 +270,36 @@ void check_completion() {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
     struct sockaddr_in server_addr, client_addr;
     uint8_t buffer[MAX_PACKET_SIZE];
     socklen_t addr_len = sizeof(client_addr);
 
+    // Sprawdź argumenty
+    if (argc < 2) {
+        printf("Usage: %s <lsystem_file>\n", argv[0]);
+        printf("Example: %s koch.txt\n", argv[0]);
+        printf("\nL-system file format:\n");
+        printf("  axiom: F\n");
+        printf("  angle: 90\n");
+        printf("  iterations: 3\n");
+        printf("  rule: F -> F+F-F-F+F\n");
+        return 1;
+    }
+
     // Inicjalizacja bitmapy spacjami
     memset(final_bitmap, ' ', sizeof(final_bitmap));
 
-    // 1. Generuj L-System (np. 3 iteracje)
-    generate_lsystem(3);
+    // 1. Wczytaj i wygeneruj L-System z pliku
+    if (load_lsystem(argv[1]) < 0) {
+        return 1;
+    }
+    generate_lsystem();
+    
+    if (l_system_len == 0) {
+        printf("[ERROR] L-system string is empty!\n");
+        return 1;
+    }
 
     // 2. Setup Gniazda
     if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
@@ -233,7 +364,7 @@ int main() {
                 PayloadConfig cfg;
                 cfg.node_id = node_idx;
                 cfg.step_size = 2;
-                cfg.angle = htons(90);
+                cfg.angle = htons(lsystem.angle);  // Kąt z pliku L-systemu
                 cfg.x_min = htons(nodes[node_idx].x_min);
                 cfg.x_max = htons(nodes[node_idx].x_max);
                 cfg.y_min = htons(nodes[node_idx].y_min);

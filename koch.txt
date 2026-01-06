@@ -1,0 +1,7 @@
+# Koch Curve (Snowflake variant)
+# Klasyczna krzywa Kocha - kwadratowa wersja
+
+axiom: F+F+F+F
+angle: 90
+iterations: 2
+rule: F -> F+F-F-FF+F+F-F

@@ -1,0 +1,7 @@
+# Simple Square
+# Prosty kwadrat do podstawowych testów
+
+axiom: F+F+F+F
+angle: 90
+iterations: 1
+rule: F -> F+F-F-F+F

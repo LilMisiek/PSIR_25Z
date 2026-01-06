@@ -1,0 +1,8 @@
+# Dragon Curve
+# Smocza krzywa - fraktal z ostrymi zakrętami
+
+axiom: X
+angle: 90
+iterations: 8
+rule: X -> X+YF+
+rule: Y -> -FX-Y

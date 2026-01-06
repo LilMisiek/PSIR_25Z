@@ -1,0 +1,8 @@
+# Sierpinski Triangle
+# Trójkąt Sierpińskiego
+
+axiom: F-G-G
+angle: 120
+iterations: 4
+rule: F -> F-G+F+G-F
+rule: G -> GG
